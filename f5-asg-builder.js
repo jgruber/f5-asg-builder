@@ -84,12 +84,12 @@ let embedRPMs = (name, rpms) => {
 
 let createDockerImage = (options) => {
 
-    if (options.containername === undefined) {
+    if (options.imagename === undefined) {
         throw new Error(colors.red.underline(
             'you must supply a name with -n or --continaername option'));
     }
 
-    mkdirp.sync(__dirname + '/' + options.containername);
+    mkdirp.sync(__dirname + '/' + options.imagename);
 
     var dockerfile_text = 'FROM ' + options.image + '\n\n';
 
@@ -98,12 +98,12 @@ let createDockerImage = (options) => {
     var use_ldap_auth = false;
     if (options.auth === 'basic') {
         use_basic_auth = true;
-        createBaiscAuth(options.containername, options.user, options.password);
+        createBaiscAuth(options.imagename, options.user, options.password);
         dockerfile_text = dockerfile_text + "COPY basic-auth/auth/basic_auth.conf /usr/local/apache2/conf/auth/basic.conf\n";
         dockerfile_text = dockerfile_text + "COPY basic-auth/pass/htpasswd.user /etc/www/pass/htpasswd.user\n";
     } else if (options.auth == 'ldap') {
         use_ldap_auth = true;
-        createLDAPAuth(options.containername, options.ldapurl, options.ldapbinddn, options.ldapbindpassword);
+        createLDAPAuth(options.imagename, options.ldapurl, options.ldapbinddn, options.ldapbindpassword);
         dockerfile_text = dockerfile_text + "COPY basic-auth/auth/ldap.conf /usr/local/apache2/conf/auth/basic.conf\n";
     }
 
@@ -121,13 +121,13 @@ let createDockerImage = (options) => {
     }
 
     if (Array.isArray(options.rpms)) {
-        const cp_text = embedRPMs(options.containername, options.rpms);
+        const cp_text = embedRPMs(options.imagename, options.rpms);
         dockerfile_text = dockerfile_text + cp_text;
     }
 
-    fs.writeFileSync(__dirname + '/' + options.containername + '/Dockerfile', dockerfile_text);
+    fs.writeFileSync(__dirname + '/' + options.imagename + '/Dockerfile', dockerfile_text);
 
-    child_process.execFileSync('docker', ['build', options.containername, '-t', options.containername + ':latest'], {
+    child_process.execFileSync('docker', ['build', options.imagename, '-t', options.imagename + ':latest'], {
         stdio: 'inherit'
     });
     var bind_ip = ''
@@ -136,7 +136,7 @@ let createDockerImage = (options) => {
     }
     if (options.launch) {
         child_process.execFileSync(
-            'docker', ['run', '-d', '-p', bind_ip + options.httpport + ':80', '-p', bind_ip + options.tlsport + ':443', options.containername + ":latest"], {
+            'docker', ['run', '-d', '-p', bind_ip + options.httpport + ':80', '-p', bind_ip + options.tlsport + ':443', options.imagename + ":latest"], {
                 stdio: 'inherit'
             });
         process.stdout.write(colors.yellow(
@@ -145,7 +145,7 @@ let createDockerImage = (options) => {
         process.stdout.write(colors.yellow(
             '\n\nYou can launch your container with the command\n\n'));
         process.stdout.write(colors.cyan(
-            'docker run -d -p ' + bind_ip + options.httpport + ':80 -p ' + bind_ip + options.tlsport + ':443 ' + options.containername + ":latest"))
+            'docker run -d -p ' + bind_ip + options.httpport + ':80 -p ' + bind_ip + options.tlsport + ':443 ' + options.imagename + ":latest"))
         process.stdout.write('\n\n')
     }
 };
@@ -156,7 +156,7 @@ let list = (val) => {
 
 program
     .version('1.0.0')
-    .option('-n, --containername <value>', 'container name (required)')
+    .option('-n, --imagename <value>', 'image name to create (required)')
     .option('-i, --image [value]', 'name of docker image to use to base container image', 'f5devcentral/f5-api-services-gateway:latest')
     .option('--localhost', 'limit access to localhost.')
     .option('--tlsport [n]', 'alternative TLS port to expose', 8443)
@@ -186,7 +186,7 @@ Examples:
 	        --password adminpassword 
 
         node f5-asg-builder.js 
-            --containername enterprise_pool_deployer 
+            --imagename enterprise_pool_deployer 
             --ldapurl ldap://dc1.example.com 
 	        --ldapbinddn supernetopservice@example.com 
 	        --ldapbindpassword fF55395f8ba84ffb986490f481628365! 
