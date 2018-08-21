@@ -27,7 +27,6 @@ let createBaiscAuth = (name, user, pass) => {
     }
     let auth_file = 'AuthType basic\n' +
         'AuthName "private area"\n' +
-        'AuthBasicProvider ldap\n\n' +
         'AuthUserFile /etc/www/pass/htpasswd.user\n' +
         'Require valid-user\n';
     fs.writeFileSync(basic_auth_dir + 'basic_auth.conf', auth_file);
