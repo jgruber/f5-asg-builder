@@ -14,7 +14,7 @@ const colors = require('colors');
 let createBaiscAuth = (name, user, pass) => {
     if (user === undefined || pass === undefined) {
         const basic_auth_err = colors.red.underline(
-            'basic authorization required both user and pass options to be defined');
+            'basic authorization required both user and password options to be defined');
         throw new Error(basic_auth_err);
     }
     const basic_auth_dir = __dirname + '/' + name + '/basic-auth/auth/';
@@ -52,7 +52,7 @@ let createLDAPAuth = (name, ldapurl, ldapbinddn, ldapbindpassword) => {
         'AuthBasicProvider ldap\n\n' +
         'AuthLDAPURL "' + ldapurl + '"\n' +
         'AuthLDAPBindDN "' + ldapbinddn + '"\n' +
-        'AuthLDAPBindPassword "' + ldapbindpassword + '"\n\n' +
+        'AuthLDAPBindPassword "' + ldapbindpassword + '"\n' +
         'Require valid-user\n';
     fs.writeFileSync(ldap_auth_dir + 'ldap.conf', auth_file);
 }
