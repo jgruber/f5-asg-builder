@@ -25,8 +25,8 @@ let createBaiscAuth = (name, user, pass) => {
     if (!fs.existsSync(basic_pass_dir)) {
         mkdirp.sync(basic_pass_dir);
     }
-    let auth_file = 'AuthType basic\n' +
-        'AuthName "private area"\n' +
+    let auth_file = 'AuthType Basic\n' +
+        'AuthName "Restricted Access"\n' +
         'AuthUserFile /etc/www/pass/htpasswd.user\n' +
         'Require valid-user\n';
     fs.writeFileSync(basic_auth_dir + 'basic_auth.conf', auth_file);
@@ -47,8 +47,8 @@ let createLDAPAuth = (name, ldapurl, ldapbinddn, ldapbindpassword) => {
     if (!fs.existsSync(ldap_auth_dir)) {
         mkdirp.sync(ldap_auth_dir);
     }
-    let auth_file = 'AuthType basic\n' +
-        'AuthName "private area"\n' +
+    let auth_file = 'AuthType Basic\n' +
+        'AuthName "Restricted Access"\n' +
         'AuthBasicProvider ldap\n\n' +
         'AuthLDAPURL "' + ldapurl + '"\n' +
         'AuthLDAPBindDN "' + ldapbinddn + '"\n' +
