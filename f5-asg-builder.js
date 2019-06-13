@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
+/* jshint esversion: 6 */
+/* jshint node: true */
+
 'use strict';
 
 const program = require('commander');
-
 const child_process = require('child_process');
 const fs = require('fs');
 const mkdirp = require('mkdirp');
+const url = require('url');
 const md5 = require('apache-md5');
 const request = require('sync-request');
 const colors = require('colors');
@@ -33,7 +36,7 @@ let createBaiscAuth = (name, user, pass) => {
     const pwhash = md5(pass);
     let password_file = user + ':' + pwhash + '\n';
     fs.writeFileSync(basic_pass_dir + 'htpasswd.user', password_file);
-}
+};
 
 let createLDAPAuth = (name, ldapurl, ldapbinddn, ldapbindpassword) => {
     if (ldapurl === undefined ||
@@ -55,7 +58,7 @@ let createLDAPAuth = (name, ldapurl, ldapbinddn, ldapbindpassword) => {
         'AuthLDAPBindPassword "' + ldapbindpassword + '"\n' +
         'Require valid-user\n';
     fs.writeFileSync(ldap_auth_dir + 'ldap.conf', auth_file);
-}
+};
 
 let embedRPMs = (name, rpms) => {
     if (Array.isArray(rpms)) {
@@ -70,23 +73,30 @@ let embedRPMs = (name, rpms) => {
             if (fs.existsSync(rpm_dir + rpm_file)) {
                 process.stdout.write(colors.red(rpms[idx] + ' already downloaded.. skipping\n'));
             } else {
-                process.stdout.write(colors.yellow('downloading ' + rpms[idx] + '\n'));
-                var res = request('GET', rpms[idx]);
-                fs.writeFileSync(rpm_dir + rpm_file, res.getBody());
+                const rpm_url = url.parse(rpms[idx]);
+                if (rpm_url.protocol == 'file:') {
+                    fs.copyFileSync(rpm_url.path, rpm_dir + rpm_file);
+                } else {
+                    process.stdout.write(colors.yellow('downloading ' + rpms[idx] + '\n'));
+                    var res = request('GET', rpms[idx]);
+                    fs.writeFileSync(rpm_dir + rpm_file, res.getBody());
+                }
             }
         }
         return cp_text;
     } else {
         return '';
     }
-}
+};
 
 let createDockerImage = (options) => {
 
     if (options.imagename === undefined) {
         throw new Error(colors.red.underline(
-            'you must supply a name with -n or --continaername option'));
+            'you must supply a name with -n or --imagename option'));
     }
+
+    options.imagename = options.imagename.toLowerCase();
 
     mkdirp.sync(__dirname + '/' + options.imagename);
 
@@ -129,13 +139,18 @@ let createDockerImage = (options) => {
     child_process.execFileSync('docker', ['build', options.imagename, '-t', options.imagename + ':latest'], {
         stdio: 'inherit'
     });
-    var bind_ip = ''
+    var bind_ip = '';
     if (options.localhost) {
-        bind_ip = '127.0.0.1:'
+        bind_ip = '127.0.0.1:';
     }
+    var daemon_switch = '-d';
+    if (options.foreground) {
+        daemon_switch = '-it';
+    }
+
     if (options.launch) {
         child_process.execFileSync(
-            'docker', ['run', '-d', '-p', bind_ip + options.httpport + ':80', '-p', bind_ip + options.tlsport + ':443', options.imagename + ":latest"], {
+            'docker', ['run', daemon_switch, '-p', bind_ip + options.httpport + ':80', '-p', bind_ip + options.tlsport + ':443', options.imagename + ":latest"], {
                 stdio: 'inherit'
             });
         process.stdout.write(colors.yellow(
@@ -144,18 +159,18 @@ let createDockerImage = (options) => {
         process.stdout.write(colors.yellow(
             '\n\nYou can launch your container with the command\n\n'));
         process.stdout.write(colors.cyan(
-            'docker run -d -p ' + bind_ip + options.httpport + ':80 -p ' + bind_ip + options.tlsport + ':443 ' + options.imagename + ":latest"))
-        process.stdout.write('\n\n')
+            'docker run -d -p ' + bind_ip + options.httpport + ':80 -p ' + bind_ip + options.tlsport + ':443 ' + options.imagename + ":latest"));
+        process.stdout.write('\n\n');
     }
 };
 
 let list = (val) => {
     return val.split(',');
-}
+};
 
 program
     .version('1.0.0')
-    .option('-n, --imagename <value>', 'image name to create (required)')
+    .option('-n, --imagename <value>', 'lowercase image name to create (required)')
     .option('-i, --image [value]', 'name of docker image to use to base container image', 'f5devcentral/f5-api-services-gateway:latest')
     .option('--localhost', 'limit access to localhost.')
     .option('--tlsport [n]', 'alternative TLS port to expose', 8443)
@@ -168,8 +183,9 @@ program
     .option('--ldapbindpassword [value]', 'LDAP auth bind password.')
     .option('--authincontainer', 'copy authorization settings into container')
     .option('--bigips <items>', 'BIG-IPs to trust comma separated list of username:password:mgmt-ip', list)
-    .option('--rpms <items>', 'URLs for iControlLX RPMs to install', list)
-    .option('--launch', 'Launch a container from the image built')
+    .option('--rpms <items>', 'URLs for iControlLX RPMs to install (comma separated)', list)
+    .option('--launch', 'launch a container from the image built')
+    .option('--foreground', 'keep the lauched gateway in the terminal foreground');
 
 program.on('--help', () => {
     console.log(`
