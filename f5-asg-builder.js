@@ -108,20 +108,20 @@ let createDockerImage = (options) => {
     if (options.auth === 'basic') {
         use_basic_auth = true;
         createBaiscAuth(options.imagename, options.user, options.password);
+        dockerfile_text = dockerfile_text + "ENV AUTH='CUSTOM'\n";
         dockerfile_text = dockerfile_text + "COPY basic-auth/auth/basic_auth.conf /usr/local/apache2/conf/auth/basic.conf\n";
         dockerfile_text = dockerfile_text + "COPY basic-auth/pass/htpasswd.user /etc/www/pass/htpasswd.user\n";
     } else if (options.auth == 'ldap') {
         use_ldap_auth = true;
         createLDAPAuth(options.imagename, options.ldapurl, options.ldapbinddn, options.ldapbindpassword);
+        dockerfile_text = dockerfile_text + "ENV AUTH='CUSTOM'\n";
         dockerfile_text = dockerfile_text + "COPY basic-auth/auth/ldap.conf /usr/local/apache2/conf/auth/basic.conf\n";
+    } else {
+        dockerfile_text = dockerfile_text + "ENV AUTH='DISABLE'\n";
     }
 
     if (options.tlsport > 0) {
         dockerfile_text = dockerfile_text + "EXPOSE " + options.tlsport + ':443/tcp \n';
-    }
-
-    if (options.httpport > 0) {
-        dockerfile_text = dockerfile_text + "EXPOSE " + options.httpport + ':80/tcp \n';
     }
 
     if (Array.isArray(options.bigips)) {
@@ -148,18 +148,40 @@ let createDockerImage = (options) => {
         daemon_switch = '-it';
     }
 
+    var config_volume = '';
+    if (options.configvolume) {
+        config_volume = ' -v ' + options.configvolume + ':/var/config';
+    }
+
+    var exts_volume = '';
+    if (options.extsvolume) {
+        exts_volume = ' -v ' + options.extsvolume + ":/root/lx";
+    }
+
     if (options.launch) {
+        var args = [];
+        args.push('run');
+        args.push(daemon_switch);
+        args.push('-p');
+        args.push(bind_ip + options.tlsport + ':443');
+        if (options.configvolume) {
+            args.push('-v');
+            args.push(options.configvolume + ':/var/config');
+        }
+        if (options.exts_volume) {
+            args.push('-v');
+            args.push(options.extsvolume + ':/root/lx');
+        }
+        args.push(options.imagename + ":latest");
         child_process.execFileSync(
-            'docker', ['run', daemon_switch, '-p', bind_ip + options.httpport + ':80', '-p', bind_ip + options.tlsport + ':443', options.imagename + ":latest"], {
-                stdio: 'inherit'
-            });
+            'docker', args, { stdio: 'inherit' });
         process.stdout.write(colors.yellow(
             '\n\nContainer running at https://localhost:' + options.tlsport + '\n\n'));
     } else {
         process.stdout.write(colors.yellow(
             '\n\nYou can launch your container with the command\n\n'));
         process.stdout.write(colors.cyan(
-            'docker run -d -p ' + bind_ip + options.httpport + ':80 -p ' + bind_ip + options.tlsport + ':443 ' + options.imagename + ":latest"));
+            'docker run -d ' + config_volume + exts_volume + ' -p ' + bind_ip + options.tlsport + ':443 ' + options.imagename + ":latest"));
         process.stdout.write('\n\n');
     }
 };
@@ -173,8 +195,11 @@ program
     .option('-n, --imagename <value>', 'lowercase image name to create (required)')
     .option('-i, --image [value]', 'name of docker image to use to base container image', 'f5devcentral/f5-api-services-gateway:latest')
     .option('--localhost', 'limit access to localhost.')
+    .option('--configvolume', 'directory to persist configurations - including trusts', 'none')
+    .option('--extsvolume', 'directory to read iControl LX extensions to install', 'none')
+    .option('--rpms <items>', 'URLs for iControlLX RPMs to install (comma separated)', list)
+    .option('--bigips <items>', 'BIG-IPs to trust comma separated list of username:password:mgmt-ip', list)
     .option('--tlsport [n]', 'alternative TLS port to expose', 8443)
-    .option('--httpport [n]', 'alternative HTTP port to expose', 8080)
     .option('--auth [value]', 'set authorization type to basic or ldap', 'none')
     .option('--user [value]', 'basic auth username.')
     .option('--password [value]', 'basic auth password.')
@@ -182,8 +207,6 @@ program
     .option('--ldapbinddn [value]', 'LDAP auth bind DN.')
     .option('--ldapbindpassword [value]', 'LDAP auth bind password.')
     .option('--authincontainer', 'copy authorization settings into container')
-    .option('--bigips <items>', 'BIG-IPs to trust comma separated list of username:password:mgmt-ip', list)
-    .option('--rpms <items>', 'URLs for iControlLX RPMs to install (comma separated)', list)
     .option('--launch', 'launch a container from the image built')
     .option('--foreground', 'keep the lauched gateway in the terminal foreground');
 
@@ -195,18 +218,23 @@ Examples:
             -n bigip_gateway 
             -i supernetops/f5-apiservices-gateway:latest 
             --tlsport 9443 
-            --httpport 9080   
             --auth basic 
-	        --user admin 
-	        --password adminpassword 
+            --user admin 
+            --password adminpassword 
 
         node f5-asg-builder.js 
             --imagename enterprise_pool_deployer 
             --ldapurl ldap://dc1.example.com 
-	        --ldapbinddn supernetopservice@example.com 
-	        --ldapbindpassword fF55395f8ba84ffb986490f481628365! 
+            --ldapbinddn supernetopservice@example.com 
+            --ldapbindpassword fF55395f8ba84ffb986490f481628365! 
             --bigips admin:admin:192.168.245.1,admin:admin:192.168.245.2 
             --rpms https://git.example.com/supetnetops/pool_deployer/releases/download/v1.0.0/pool-deployer-1.0.0.noarch.rpm
+
+        node f5-asg-builder.js
+            --imagename TrustedASG
+            --auth none
+            --configvolume ./asgdata
+            --rpms https://github.com/F5Networks/f5-declarative-onboarding/releases/download/v1.5.0/f5-declarative-onboarding-1.5.0-11.noarch.rpm,https://github.com/jgruber/TrustedDevices/releases/download/1.3.0.1/TrustedDevices-1.3.0-0004.noarch.rpm,https://github.com/jgruber/TrustedProxy/releases/download/1.0.1.2/TrustedProxy-1.0.1-0004.noarch.rpm,https://github.com/jgruber/TrustedExtensions/releases/download/1.0.1/TrustedExtensions-1.0.1-0001.noarch.rpm,https://github.com/jgruber/TrustedASMPolicies/releases/download/1.0.5/TrustedASMPolicies-1.0.5-0004.noarch.rpm 
     `);
 });
 
